@@ -25235,60 +25235,79 @@ module.exports = require('./lib/React');
 },{"./lib/React":159}],183:[function(require,module,exports){
 let React = require('react');
 let Moment = require('moment');
+let TaskPopup = require('./TaskPopup.jsx');
+// Table components
+let TableRow = require('./table-components/TableRow.jsx');
+let TaskTitleTd = require('./table-components/TaskTitleTd.jsx');
+let TaskDraggableTd = require('./table-components/TaskDraggableTd.jsx');
+let TaskNotDraggableTd = require('./table-components/TaskNotDraggableTd.jsx');
+let TaskPlainTd = require('./table-components/TaskPlainTd.jsx');
 
 let generateId = function () {
     return Math.random().toString(36).substring(11);
 };
+let id1 = generateId();
+let id2 = generateId();
+let id3 = generateId();
+let id4 = generateId();
+let id5 = generateId();
+
 // Dummy task data
-let taskList = [{
-    id: generateId(),
+let taskList = {};
+taskList[id1] = {
+    _id: id1,
     title: "Task One",
     startDate: Moment().add(1, 'd').unix(),
     endDate: Moment().add(5, 'days').unix()
-}, {
-    id: generateId(),
-    title: "Task two",
-    startDate: Moment().add(3, 'days').unix(),
+};
+taskList[id2] = {
+    _id: id2,
+    title: "Task Two",
+    startDate: Moment().add(2, 'd').unix(),
     endDate: Moment().add(4, 'days').unix()
-}, {
-    id: generateId(),
-    title: "Task three",
-    startDate: Moment().unix(),
+};
+taskList[id3] = {
+    _id: id3,
+    title: "Task Three",
+    startDate: Moment().add(3, 'd').unix(),
+    endDate: Moment().add(6, 'days').unix()
+};
+taskList[id4] = {
+    _id: id4,
+    title: "Task Four",
+    startDate: Moment().add(1, 'd').unix(),
     endDate: Moment().add(2, 'days').unix()
-}, {
-    id: generateId(),
-    title: "Task four",
-    startDate: Moment().add(6, 'days').unix(),
-    endDate: Moment().add(7, 'days').unix()
-}, {
-    id: generateId(),
+};
+taskList[id5] = {
+    _id: id5,
     title: "Task five",
-    startDate: Moment().add(2, 'days').unix(),
-    endDate: Moment().add(4, 'days').unix()
-}];
+    startDate: Moment().add(4, 'd').unix(),
+    endDate: Moment().add(10, 'days').unix()
+};
 
 let GanttChart = React.createClass({
     displayName: 'GanttChart',
 
     getInitialState() {
         return {
-            taskList: { taskList },
+            taskList: taskList,
             timeRange: [],
             searchText: "",
             searchSelect: "",
             newTaskInput: "",
-            popup: false,
+            popupShow: false,
             popupTask: null
         };
     },
     componentWillMount() {
         let startDates = [];
         let endDates = [];
-        let taskListObject = this.state.taskList;
-        for (let task of taskListObject.taskList) {
+        let taskList = Object.values(this.state.taskList);
+        for (let task of taskList) {
             startDates.push(task.startDate);
             endDates.push(task.endDate);
         }
+
         // Filter arrays to have unique values
         let uniqueStartDates = [...new Set(startDates)];
         let uniqueEndDates = [...new Set(endDates)];
@@ -25308,13 +25327,14 @@ let GanttChart = React.createClass({
     },
     // Button new task
     onClickNewTask() {
+        let taskId = generateId();
         let tasks = this.state.taskList;
-        tasks.taskList.push({
-            id: generateId(),
+        tasks[taskId] = {
+            _id: taskId,
             title: "Task " + Math.random().toString(12).substring(7),
             startDate: Moment().add(Math.floor(Math.random() * 3) + 1, 'days').unix(),
             endDate: Moment().add(Math.floor(Math.random() * 6) + 3, 'days').unix()
-        });
+        };
 
         this.setState({ taskList: tasks });
     },
@@ -25327,26 +25347,115 @@ let GanttChart = React.createClass({
             momentStartDate.add(1, 'day');
             return this.generateTimeRange(momentStartDate, momentEndDate, result);
         } else {
+            result.push(momentEndDate.unix());
             return result;
         }
     },
     // Render popup with task details
-    renderTaskPopup(rowId) {
-        let tasks = this.state.taskList;
-        this.setState({ popupTask: tasks.taskList[rowId] });
-        this.setState({ popup: true });
+    renderTaskPopup(e) {
+        const tableCellTaskId = e.target.id.split('-')[1];
+        let { taskList } = this.state;
+        this.setState({ popupTask: taskList[tableCellTaskId] });
+        this.setState({ popupShow: true });
     },
     closeTaskPopup() {
-        this.setState({ popup: false });
+        this.setState({ popupShow: false });
         this.setState({ popupTask: null });
+    },
+    // Update task data to state and pass data to callback if callback exists
+    saveTaskData(taskObject) {
+        // Update gantt chart state
+        let taskList = this.state.taskList;
+        taskList[taskObject._id] = taskObject;
+        this.setState({ taskList });
+        // Pass data to callback
+        if (this.props.onSaveTaskCb) {
+            this.props.onSaveTaskCb(taskObject);
+        }
+    },
+    /*---------------------- Functions for task dragging - drag/drop events --------------------*/
+    columnDragStart(dateValueId, e) {
+        const tableCellTaskId = e.target.id.split('-')[1];
+        const columnDueDate = parseInt(document.getElementById(dateValueId).value);
+        let task = this.state.taskList[tableCellTaskId];
+
+        // Set to state that task is dragged from start date
+        if (columnDueDate === task.startDate) {
+            this.setState({ draggableTaskDate: true });
+        }
+
+        // Set to state that task is dragged from end date
+        if (columnDueDate === task.endDate) {
+            this.setState({ draggableTaskDate: false });
+        }
+
+        this.setState({ draggableTaskId: tableCellTaskId });
+    },
+    // On drag enter event
+    columnDragEnter(e) {
+        const tableCellTaskId = e.target.id.split('-')[1];
+        if (this.state.draggableTaskId === tableCellTaskId) {
+            e.target.classList.add("dragged");
+            e.target.style.backgroundColor = "#265A88";
+            e.target.style.opacity = .5;
+        }
+    },
+    // On drag leave event
+    columnDragLeave(e) {
+        const tableCellTaskId = e.target.id.split('-')[1];
+        if (this.state.draggableTaskId === tableCellTaskId) {
+            e.target.classList.remove("dragged");
+            e.target.style.removeProperty("background-color");
+            e.target.style.removeProperty("opacity");
+            if (e.target.className === "draggable") {
+                e.target.style.backgroundColor = "#265A88";
+            }
+            if (e.target.className === "notDraggable") {
+                e.target.style.backgroundColor = "#0077b3";
+            }
+        }
+    },
+    // On drag over event
+    columnDragOver(e) {
+        // Needed so drop event can fire
+        e.preventDefault();
+    },
+    // On drop event
+    // When due date dropped update task start or end due date
+    columnDrop(dateValueId, e) {
+        const tableCellTaskId = e.target.id.split('-')[1];
+        const columnDueDate = parseInt(document.getElementById(dateValueId).value);
+        let task = this.state.taskList[tableCellTaskId];
+        if (this.state.draggableTaskId === tableCellTaskId) {
+            e.target.style.removeProperty("opacity");
+            // Set task start date or end date based on which column is drag date dropped
+            if (columnDueDate > task.endDate) {
+                task.endDate = columnDueDate;
+            }
+            if (columnDueDate < task.startDate) {
+                task.startDate = columnDueDate;
+            }
+            if (columnDueDate > task.startDate && columnDueDate < task.endDate && this.state.draggableTaskDate) {
+                task.startDate = columnDueDate;
+            } else if (columnDueDate > task.startDate && columnDueDate < task.endDate && !this.state.draggableTaskDate) {
+                task.endDate = columnDueDate;
+            }
+        }
+
+        this.saveTaskData(task);
+        this.state.draggableTaskDate = null;
     },
     // Generate table header for time range
     renderChartHeaderColumns() {
         let tableThStyle = {
-            width: "1%",
+            width: "5%",
             whiteSpace: "nowrap"
         };
-        let rows = [];
+        let rows = [React.createElement(
+            'th',
+            { style: tableThStyle, key: 'tasksHeaderCell' },
+            'Tasks'
+        )];
         let timeRange = this.state.timeRange;
         // Generate table header element foreach date
         timeRange.forEach(function (date, index) {
@@ -25361,63 +25470,85 @@ let GanttChart = React.createClass({
     },
     // Generate task rows with time range
     renderTaskRows() {
-        let taskDateColumnStyle = {
-            backgroundColor: "#265A88",
-            borderRight: "none",
-            borderLeft: "none",
-            borderRadius: "2px",
-            backgroundClip: "padding-box"
-        };
         let taskRows = [];
         let timeRange = this.state.timeRange;
-        let tasksObject = this.state.taskList;
+        let taskList = Object.values(this.state.taskList);
+        // Sort task list by start due date
+        /*taskList = taskList.sort(function (a, b) {
+         return a.startDate - b.startDate;
+         });*/
         // Generate row foreach task
-        const tmpRender = function (task, index) {
-            let taskDates = [];
-            timeRange.forEach(function (date, index) {
-                if (Moment.unix(date) >= Moment.unix(task.startDate) && Moment.unix(date) <= Moment.unix(task.endDate)) {
-                    taskDates.push(React.createElement('td', { style: taskDateColumnStyle, key: index }));
+        const tmpRender = function (task) {
+            let taskRow = [React.createElement(TaskTitleTd, { key: task.title, title: task.title })];
+            timeRange.forEach(function (date, tdIndex) {
+                const tdId = tdIndex + '-' + task._id;
+                const dateValueId = task._id + '-' + tdIndex;
+
+                if (date > task.startDate && date < task.endDate) {
+                    taskRow.push(React.createElement(TaskNotDraggableTd, { className: 'notDraggable',
+                        key: tdIndex,
+                        keyProp: tdIndex,
+                        id: tdId,
+                        inputId: dateValueId,
+                        date: date,
+                        onClick: this.renderTaskPopup,
+                        onDragLeave: this.columnDragLeave,
+                        onDragEnter: this.columnDragEnter,
+                        onDragOver: this.columnDragOver,
+                        onDrop: this.columnDrop.bind(this, dateValueId) }));
+                } else if (date === task.startDate || date === task.endDate) {
+                    taskRow.push(React.createElement(TaskDraggableTd, { className: 'draggable',
+                        key: tdIndex,
+                        keyProp: tdIndex,
+                        id: tdId,
+                        inputId: dateValueId,
+                        date: date,
+                        onClick: this.renderTaskPopup,
+                        onDragStart: this.columnDragStart.bind(this, dateValueId),
+                        onDragLeave: this.columnDragLeave,
+                        onDragEnter: this.columnDragEnter,
+                        onDragOver: this.columnDragOver,
+                        onDrop: this.columnDrop.bind(this, dateValueId) }));
                 } else {
-                    taskDates.push(React.createElement('td', { key: index }));
+                    taskRow.push(React.createElement(TaskPlainTd, { className: 'plainTd',
+                        key: tdIndex,
+                        keyProp: tdIndex,
+                        id: tdId,
+                        inputId: dateValueId,
+                        date: date,
+                        onDragLeave: this.columnDragLeave,
+                        onDragEnter: this.columnDragEnter,
+                        onDragOver: this.columnDragOver,
+                        onDrop: this.columnDrop.bind(this, dateValueId) }));
                 }
-            });
+            }, this);
 
             taskRows.push(React.createElement(
-                'tr',
-                { key: index, onMouseOver: this.renderTaskPopup.bind(this, index), onMouseLeave: this.closeTaskPopup },
-                React.createElement(
-                    'td',
-                    null,
-                    task.title
-                ),
-                taskDates
+                TableRow,
+                { key: task._id, keyProp: task._id },
+                taskRow
             ));
         };
 
-        tasksObject.taskList.forEach(tmpRender.bind(this));
+        taskList.forEach(tmpRender.bind(this));
 
         return taskRows;
     },
+
     // Create table structure
     renderChartTable() {
-        let tableThStyle = {
-            width: "5%",
-            whiteSpace: "nowrap"
+        let tableStyle = {
+            width: "100%"
         };
         return React.createElement(
             'table',
-            { className: 'table table-bordered table-hover table-striped' },
+            { style: tableStyle, className: 'table table-bordered table-hover table-striped' },
             React.createElement(
                 'thead',
                 null,
                 React.createElement(
-                    'tr',
-                    null,
-                    React.createElement(
-                        'th',
-                        { style: tableThStyle },
-                        'Tasks'
-                    ),
+                    TableRow,
+                    { key: 'tasksHeader', keyProp: 'tasksHeader' },
                     this.renderChartHeaderColumns()
                 )
             ),
@@ -25428,6 +25559,7 @@ let GanttChart = React.createClass({
             )
         );
     },
+
     render() {
         let containerStyle = {
             maxWidth: "1100px",
@@ -25447,20 +25579,6 @@ let GanttChart = React.createClass({
             padding: 0,
             marginTop: "30px"
         };
-        let popupDivStyle = {
-            MozBoxShadow: "0 0 30px 5px #999",
-            WebkitBoxShadow: "0 0 30px 5px #999",
-            position: "absolute",
-            backgroundColor: "#265A88",
-            color: "#ffffff",
-            padding: 30,
-            borderRadius: 20
-        };
-
-        if (this.state.popup === false) {
-            popupDivStyle.display = "none";
-        }
-
         return React.createElement(
             'div',
             { style: containerStyle, className: 'container' },
@@ -25556,43 +25674,530 @@ let GanttChart = React.createClass({
                     this.renderChartTable()
                 )
             ),
+            React.createElement(TaskPopup, { popupTask: this.state.popupTask,
+                popupShow: this.state.popupShow,
+                onClickClose: this.closeTaskPopup,
+                taskFieldsRules: this.props.taskFieldsRules,
+                saveTaskStateCb: this.saveTaskData })
+        );
+    }
+});
+
+GanttChart.defaultProps = {
+    taskFieldsRules: {
+        taskOptionalFieldsRules: {
+            title: {
+                inputType: "text",
+                name: "title",
+                label: "Task name"
+            },
+            startDate: {
+                inputType: "date",
+                name: "start_date",
+                label: "Start due date"
+
+            },
+            endDate: {
+                inputType: "date",
+                name: "due_date",
+                label: "End due date"
+            },
+            button1: {
+                inputType: "button",
+                name: "send_email",
+                label: "Send email",
+                onClick: (taskData, event) => {
+                    //... do something
+                }
+            }
+        },
+        taskMandatoryFields: ['_id', 'title', 'startDate', 'endDate', 'button1'],
+        taskEditableFields: ['title', 'startDate', 'endDate', 'button1']
+    }
+};
+
+// Callback prop for task update on task edit/save
+GanttChart.propTypes = {
+    onSaveTaskCb: React.PropTypes.func
+};
+
+module.exports = GanttChart;
+
+},{"./TaskPopup.jsx":184,"./table-components/TableRow.jsx":187,"./table-components/TaskDraggableTd.jsx":188,"./table-components/TaskNotDraggableTd.jsx":189,"./table-components/TaskPlainTd.jsx":190,"./table-components/TaskTitleTd.jsx":191,"moment":24,"react":182}],184:[function(require,module,exports){
+let React = require('react');
+let TaskPopupViewData = require('./TaskPopupViewData.jsx');
+let TaskPopupEditData = require('./TaskPopupEditData.jsx');
+
+let TaskPopup = React.createClass({
+    displayName: 'TaskPopup',
+
+    getInitialState() {
+        return {
+            editMode: false
+        };
+    },
+    componentWillReceiveProps(nextProps) {
+        if (nextProps.popupTask) {
+            this.setState({ taskState: nextProps.popupTask });
+        }
+    },
+    onClickEdit() {
+        this.setState({ editMode: true });
+    },
+    onClickClose() {
+        this.setState({ editMode: false });
+
+        return this.props.onClickClose();
+    },
+    onClickCancel() {
+        this.setState({ editMode: false });
+    },
+    onClickSave() {
+        this.props.saveTaskStateCb(this.state.taskState);
+        this.setState({ editMode: false });
+    },
+    updateTaskState(key, value) {
+        let { taskState } = this.state;
+        taskState[key] = value;
+        this.setState({ taskState });
+    },
+    renderDataComponent() {
+        if (!this.state.editMode) {
+            return React.createElement(TaskPopupViewData, { taskFieldsRules: this.props.taskFieldsRules,
+                popupTask: this.props.popupTask });
+        } else {
+            return React.createElement(TaskPopupEditData, { taskFieldsRules: this.props.taskFieldsRules,
+                popupTask: this.state.taskState,
+                updateTaskStateCb: this.updateTaskState });
+        }
+    },
+    renderButtons() {
+        let buttonEditStyle = {
+            color: "#265A88",
+            fontWeight: 600
+        };
+        let buttonSaveStyle = {
+            fontWeight: 600
+        };
+        let buttonCancelStyle = {
+            fontWeight: 600
+        };
+
+        if (!this.state.editMode) {
+            return React.createElement(
+                'div',
+                { className: 'col-sm-12' },
+                React.createElement(
+                    'button',
+                    { style: buttonEditStyle,
+                        className: 'btn btn-default pull-right',
+                        onClick: this.onClickEdit },
+                    'Edit'
+                )
+            );
+        } else {
+            return React.createElement(
+                'div',
+                { className: 'col-sm-12' },
+                React.createElement(
+                    'button',
+                    { style: buttonSaveStyle,
+                        className: 'btn btn-default pull-right',
+                        onClick: this.onClickSave },
+                    'Save'
+                ),
+                React.createElement(
+                    'button',
+                    { style: buttonCancelStyle,
+                        className: 'btn btn-danger pull-right',
+                        onClick: this.onClickCancel },
+                    'Cancel'
+                )
+            );
+        }
+    },
+    render() {
+        let popupCloseStyle = {
+            cursor: "pointer",
+            fontWeight: 600
+        };
+
+        let popupDivStyle = {
+            MozBoxShadow: "0 0 30px 5px #999",
+            WebkitBoxShadow: "0 0 30px 5px #999",
+            position: "absolute",
+            backgroundColor: "#265A88",
+            color: "#ffffff",
+            padding: 30
+        };
+
+        if (this.props.popupShow === false) {
+            popupDivStyle.display = "none";
+        }
+
+        return React.createElement(
+            'div',
+            { className: 'col-sm-3', style: popupDivStyle },
             React.createElement(
                 'div',
-                { className: 'col-sm-3', style: popupDivStyle },
+                { className: 'row' },
                 React.createElement(
-                    'ul',
-                    null,
+                    'div',
+                    { className: 'col-sm-10' },
+                    this.renderDataComponent()
+                ),
+                React.createElement(
+                    'div',
+                    { className: 'col-sm-2' },
                     React.createElement(
-                        'li',
-                        null,
-                        'Task name: ',
-                        this.state.popupTask !== null ? this.state.popupTask.title : ""
-                    ),
-                    React.createElement(
-                        'li',
-                        null,
-                        'Start date: ',
-                        this.state.popupTask !== null ? Moment.unix(this.state.popupTask.startDate).format('DD MMM YYYY') : ""
-                    ),
-                    React.createElement(
-                        'li',
-                        null,
-                        'End date: ',
-                        this.state.popupTask !== null ? Moment.unix(this.state.popupTask.endDate).format('DD MMM YYYY') : ""
+                        'span',
+                        { style: popupCloseStyle,
+                            className: 'pull-right',
+                            onClick: this.onClickClose },
+                        'X'
                     )
                 )
+            ),
+            React.createElement(
+                'div',
+                { className: 'row' },
+                this.renderButtons()
             )
         );
     }
 });
 
-module.exports = GanttChart;
+TaskPopup.propTypes = {
+    popupTask: React.PropTypes.object,
+    popupShow: React.PropTypes.bool,
+    onClickClose: React.PropTypes.func,
+    taskFieldRules: React.PropTypes.object,
+    saveTaskStateCb: React.PropTypes.func
+};
 
-},{"moment":24,"react":182}],184:[function(require,module,exports){
+module.exports = TaskPopup;
+
+},{"./TaskPopupEditData.jsx":185,"./TaskPopupViewData.jsx":186,"react":182}],185:[function(require,module,exports){
+let React = require('react');
+
+let TaskPopupEditData = React.createClass({
+    displayName: 'TaskPopupEditData',
+
+    onFieldChange(field, e) {
+        this.props.updateTaskStateCb(field, e.target.value);
+    },
+    createFormFields() {
+        let editFieldDivStyle = {
+            marginBottom: "30px"
+        };
+        let fields = [];
+        let fieldRules = this.props.taskFieldsRules.taskOptionalFieldsRules;
+        let mandatoryFields = this.props.taskFieldsRules.taskMandatoryFields;
+        let editableFields = this.props.taskFieldsRules.taskEditableFields;
+
+        // Intersect mandatory fields array and editable fields
+        const fieldsToRenderArray = editableFields.filter(function (n) {
+            return mandatoryFields.indexOf(n) !== -1;
+        });
+
+        // Render task input fields and custom buttons
+        const renderFields = function (field, index) {
+            if (fieldRules[field].inputType !== 'button') {
+                fields.push(React.createElement(
+                    'div',
+                    { key: index, style: editFieldDivStyle },
+                    React.createElement(
+                        'label',
+                        { key: index, htmlFor: index },
+                        fieldRules[field].label
+                    ),
+                    React.createElement('input', { className: 'form-control',
+                        key: field + index,
+                        type: fieldRules[field].inputType,
+                        name: fieldRules[field].name,
+                        onChange: this.onFieldChange.bind(this, field),
+                        value: this.props.popupTask[field]
+                    })
+                ));
+            } else {
+                fields.push(React.createElement(
+                    'div',
+                    { key: index, style: editFieldDivStyle },
+                    React.createElement(
+                        'buton',
+                        { className: 'btn btn-default',
+                            key: field + index,
+                            type: fieldRules[field].inputType,
+                            name: fieldRules[field].name,
+                            onClick: fieldRules[field].onClick(this.props.popupTask) },
+                        fieldRules[field].label
+                    )
+                ));
+            }
+        };
+
+        fieldsToRenderArray.forEach(renderFields.bind(this));
+
+        return fields;
+    },
+    render() {
+        return React.createElement(
+            'div',
+            null,
+            this.createFormFields()
+        );
+    }
+});
+
+TaskPopupEditData.PropTypes = {
+    taskFieldsRules: React.PropTypes.object,
+    popupTask: React.PropTypes.object,
+    updateTaskStateCb: React.PropTypes.func
+};
+
+module.exports = TaskPopupEditData;
+
+},{"react":182}],186:[function(require,module,exports){
+let React = require('react');
+let Moment = require('moment');
+
+let TaskPopupViewData = React.createClass({
+    displayName: 'TaskPopupViewData',
+
+    createDataList() {
+        let spanStyle = {
+            fontWeight: 600
+        };
+        let fieldRules = this.props.taskFieldsRules.taskOptionalFieldsRules;
+        dataList = [];
+        let task = this.props.popupTask;
+
+        // Generate list items for each task field except _id
+        for (let prop in task) {
+            if (task.hasOwnProperty(prop) && prop !== '_id' && prop !== 'startDate' && prop !== "endDate") {
+                dataList.push(React.createElement(
+                    'li',
+                    { key: prop },
+                    React.createElement(
+                        'span',
+                        { style: spanStyle },
+                        fieldRules[prop].label
+                    ),
+                    ': ',
+                    task[prop]
+                ));
+            } else if (task.hasOwnProperty(prop) && prop !== '_id' && (prop === 'startDate' || prop === "endDate")) {
+                dataList.push(React.createElement(
+                    'li',
+                    { key: prop },
+                    React.createElement(
+                        'span',
+                        { style: spanStyle },
+                        fieldRules[prop].label
+                    ),
+                    ': ',
+                    Moment.unix(task[prop]).format('DD MMM YYYY')
+                ));
+            }
+        }
+
+        return dataList;
+    },
+    render() {
+        return React.createElement(
+            'ul',
+            null,
+            this.createDataList()
+        );
+    }
+});
+
+TaskPopupViewData.propTypes = {
+    taskFieldsRules: React.PropTypes.object,
+    popupTask: React.PropTypes.object
+};
+
+module.exports = TaskPopupViewData;
+
+},{"moment":24,"react":182}],187:[function(require,module,exports){
+let React = require('react');
+
+let TableRow = React.createClass({
+    displayName: 'TableRow',
+
+    render() {
+        return React.createElement(
+            'tr',
+            { key: this.props.keyProp },
+            this.props.children
+        );
+    }
+});
+
+TableRow.PropTypes = {
+    keyProp: React.PropTypes.string
+};
+
+module.exports = TableRow;
+
+},{"react":182}],188:[function(require,module,exports){
+let React = require('react');
+
+let TaskDraggableTd = React.createClass({
+    displayName: "TaskDraggableTd",
+
+    render() {
+        let taskDraggableTdStyle = {
+            backgroundColor: "#265A88",
+            borderRight: "none",
+            borderLeft: "none",
+            borderRadius: "2px",
+            cursor: "pointer",
+            height: "100%",
+            backgroundClip: "padding-box"
+        };
+        return React.createElement(
+            "td",
+            { draggable: "true",
+                className: this.props.className,
+                style: taskDraggableTdStyle,
+                key: this.props.keyProp,
+                id: this.props.id,
+                onClick: this.props.onClick,
+                onDragStart: this.props.onDragStart,
+                onDragLeave: this.props.onDragLeave,
+                onDragEnter: this.props.onDragEnter,
+                onDragOver: this.props.onDragOver,
+                onDrop: this.props.onDrop },
+            React.createElement("input", { id: this.props.inputId, type: "hidden", value: this.props.date })
+        );
+    }
+});
+
+TaskDraggableTd.PropTypes = {
+    className: React.PropTypes.string,
+    keyProp: React.PropTypes.string,
+    id: React.PropTypes.string,
+    onClick: React.PropTypes.func,
+    onDragStart: React.PropTypes.func,
+    onDragEnter: React.PropTypes.func,
+    onDragOver: React.PropTypes.func,
+    onDrop: React.PropTypes.func,
+    inputId: React.PropTypes.string,
+    date: React.PropTypes.number
+};
+
+module.exports = TaskDraggableTd;
+
+},{"react":182}],189:[function(require,module,exports){
+let React = require('react');
+
+let TaskNotDraggableTd = React.createClass({
+    displayName: "TaskNotDraggableTd",
+
+    render() {
+        let taskNotDraggableTdStyle = {
+            backgroundColor: "#0077b3",
+            borderRight: "none",
+            borderLeft: "none",
+            borderRadius: "2px",
+            cursor: "pointer",
+            height: "100%",
+            backgroundClip: "padding-box"
+        };
+        return React.createElement(
+            "td",
+            { draggable: "false",
+                className: this.props.className,
+                style: taskNotDraggableTdStyle,
+                key: this.props.keyProp,
+                id: this.props.id,
+                onClick: this.props.onClick,
+                onDragLeave: this.props.onDragLeave,
+                onDragEnter: this.props.onDragEnter,
+                onDragOver: this.props.onDragOver,
+                onDrop: this.props.onDrop },
+            React.createElement("input", { id: this.props.inputId, type: "hidden", value: this.props.date })
+        );
+    }
+});
+
+TaskNotDraggableTd.PropTypes = {
+    className: React.PropTypes.string,
+    keyProp: React.PropTypes.string,
+    id: React.PropTypes.string,
+    onClick: React.PropTypes.func,
+    onDragStart: React.PropTypes.func,
+    onDragEnter: React.PropTypes.func,
+    onDragOver: React.PropTypes.func,
+    onDrop: React.PropTypes.func,
+    inputId: React.PropTypes.string,
+    date: React.PropTypes.number
+};
+
+module.exports = TaskNotDraggableTd;
+
+},{"react":182}],190:[function(require,module,exports){
+let React = require('react');
+
+let TaskPlainTd = React.createClass({
+    displayName: "TaskPlainTd",
+
+    render() {
+        return React.createElement(
+            "td",
+            { className: this.props.className,
+                key: this.props.keyProp,
+                id: this.props.id,
+                onDragLeave: this.props.onDragLeave,
+                onDragEnter: this.props.onDragEnter,
+                onDragOver: this.props.onDragOver,
+                onDrop: this.props.onDrop
+            },
+            React.createElement("input", { id: this.props.inputId, type: "hidden", value: this.props.date })
+        );
+    }
+});
+
+TaskPlainTd.PropTypes = {
+    className: React.PropTypes.string,
+    keyProp: React.PropTypes.string,
+    id: React.PropTypes.string,
+    onDragEnter: React.PropTypes.func,
+    onDragOver: React.PropTypes.func,
+    onDrop: React.PropTypes.func,
+    inputId: React.PropTypes.string,
+    date: React.PropTypes.number
+};
+
+module.exports = TaskPlainTd;
+
+},{"react":182}],191:[function(require,module,exports){
+let React = require('react');
+
+let TaskTitleTd = React.createClass({
+  displayName: 'TaskTitleTd',
+
+  render() {
+    return React.createElement(
+      'td',
+      null,
+      this.props.title
+    );
+  }
+});
+
+TaskTitleTd.PropTypes = {
+  title: React.PropTypes.string
+};
+
+module.exports = TaskTitleTd;
+
+},{"react":182}],192:[function(require,module,exports){
 let React = require('react');
 let ReactDOM = require('react-dom');
 let GanttChart = require('./components/GanttChart.jsx');
 
 ReactDOM.render(React.createElement(GanttChart, null), document.getElementById("container"));
 
-},{"./components/GanttChart.jsx":183,"react":182,"react-dom":31}]},{},[184]);
+},{"./components/GanttChart.jsx":183,"react":182,"react-dom":31}]},{},[192]);
